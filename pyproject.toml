@@ -1,0 +1,15 @@
+[project]
+name = "timed-words"
+version = "0.1.0"
+description = "When each word is said or sung in a recording"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["numpy", "torch", "torchaudio", "transformers", "uroman", "faster-whisper", "demucs", "soundfile"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["timedwords"]
