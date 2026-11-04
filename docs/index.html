@@ -38,7 +38,7 @@ pre{background:var(--card);border:1px solid var(--line);border-radius:10px;paddi
 <pre>pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install git+https://github.com/motizzle/timed-words
 python -m timedwords.song song.mp3                        # a song: its lines, each word timed
-python -m timedwords.talk talk.mp3                        # a talk: paragraphs with their start times
+python -m timedwords.talk talk.mp3 --words                # a talk: paragraphs, and each word's times
 python -m timedwords.align reading.mp3 text.txt out.json  # a Hebrew reading whose text you have</pre>
 <p class="sub">The code and how it works: <a href="https://github.com/motizzle/timed-words">github.com/motizzle/timed-words</a></p>
 </main>
