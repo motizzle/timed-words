@@ -11,8 +11,7 @@ Hebrew reading and a talk.
 | `timedwords.align` | a Hebrew reading or chant, and its text | each word's start and end, checked three ways; it fails loudly rather than guess |
 | `timedwords.talk` | a talk or a sermon | a transcript in paragraphs of about a minute, each with its start time, and each word's times if you ask |
 
-Everything runs locally on a CPU with free models (Whisper, Demucs, two wav2vec2 aligners). About 2 GB of models
-download on the first run.
+Everything runs locally on a CPU. About 2 GB of models download on the first run; each has its own license, below.
 
 ## Install
 
@@ -51,4 +50,19 @@ In `docs/samples/`, all public domain:
 
 ## License
 
-MIT
+The code is MIT.
+
+The models are not part of this repository. Each downloads from its maker on the first run, under its own license:
+
+| Model | Used by | License |
+|---|---|---|
+| Whisper `small` and `large-v3-turbo`, as converted for faster-whisper | `talk`, `song` | MIT |
+| Demucs `htdemucs` | `song` | MIT |
+| `oliverguhr/fullstop-punctuation-multilang-large` | `song` | MIT |
+| Meta's MMS aligner (`torchaudio.pipelines.MMS_FA`) | `song`, `align` | CC-BY-NC 4.0: not for commercial use |
+| `imvladikon/wav2vec2-xls-r-300m-hebrew` | `align` | none stated by its author |
+
+So `talk` can be used for anything; `song` and `align` rely on a model that is not for commercial use.
+
+This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences
+Institute (2015-2020).

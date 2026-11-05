@@ -52,4 +52,19 @@ assert 0 in unverified and 1 not in unverified, unverified
 # every recheck threw: fail loudly
 problems, unverified = A.check(['a', 'b'], [0.1, 0.5], [0.4, 0.9], [], [(0, None, None), (1, None, None)], db, hop, log=lambda *a: None)
 assert problems, 'every recheck threw, and the gate passed'
+# a word both aligners first put after a pause stays after it, though its re-ask lands before it
+full = np.concatenate([tone(1.0), np.zeros(int(0.2 * sr), np.float32), tone(3.8)])
+class Stub:
+    def __call__(self, wav, words):
+        if len(wav) == len(full): return [(0.1, 0.9), (1.4, 3.0), (3.1, 4.9)][:len(words)]
+        return [(0.2, 0.4), (0.5, 0.8), (0.85, 0.95)][:len(words)]
+real = A.decode, A.Mms, A.Hebrew
+A.decode, A.Mms, A.Hebrew = (lambda *a: full), Stub, Stub
+try:
+    out = A.align('x', ['a', 'b', 'c'], log=lambda *a: None)
+finally:
+    A.decode, A.Mms, A.Hebrew = real
+starts = out[5]
+assert starts[1] >= 1.2, f'b crossed the pause back to {starts[1]:.2f}'
+
 print('align test: every part holds')

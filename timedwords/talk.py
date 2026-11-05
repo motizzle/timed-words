@@ -4,7 +4,7 @@
     body, paragraphs = talk.transcribe('sermon.mp3')   # paragraphs: [{start, text}]
     body, paragraphs = talk.transcribe('sermon.mp3', words=True)   # each paragraph also has [{start, end, text}]
 
-WHAT IT NEEDS: faster-whisper. Free and local.
+WHAT IT NEEDS: faster-whisper. Runs locally; the model's license is in the README.
 """
 MODEL = None  # faster-whisper, loaded on the first recording
 

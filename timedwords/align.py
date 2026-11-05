@@ -287,6 +287,11 @@ def align(audio, words, t0=None, t1=None, log=print):
             best = sm if abs(sm - (t or sm)) <= abs(sh - (t or sh)) else sh
             r = which_region(best, reg)
             cand = reg[r][0] if abs(best - reg[r][0]) < 0.45 else best
+            # a word both aligners first put in one stretch stays in it: the re-ask's window can
+            # hold the previous word's tail, and a held word squeezed into it crosses a pause
+            first = which_region(m[i][0], reg)
+            if first == which_region(h[i][0], reg) and which_region(cand, reg) != first:
+                continue
             if lo + 0.02 < cand < hi - 0.02 and abs(cand - starts[i]) > 0.05:
                 starts[i] = cand; idx[i] = which_region(cand, reg)
                 how[i] = 'rewindowed'; moved += 1
