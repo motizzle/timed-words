@@ -47,8 +47,9 @@ python -m timedwords.align reading.mp3 text.txt out.json  # a Hebrew reading who
 // Each sample is a recording and what the engine wrote for it, in samples/<id>.json:
 // {lines: [{words: [{start, end, text}]}]}
 const tabs = document.querySelector('.tabs'), audio = document.querySelector('audio'), box = document.querySelector('.text')
-let words = []
+let words = [], showing = null
 function show(s) {
+  showing = s.id; words = []
   tabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', b.dataset.id === s.id))
   document.querySelector('.what').textContent = s.what
   document.querySelector('.credit').innerHTML = s.credit
@@ -56,7 +57,8 @@ function show(s) {
   box.dir = s.rtl ? 'rtl' : 'ltr'
   box.textContent = 'Loading…'
   fetch(`samples/${s.id}.json`).then((r) => r.json()).then((t) => {
-    box.textContent = ''; words = []
+    if (showing !== s.id) return  // a slower fetch for a tab already left
+    box.textContent = ''
     for (const l of t.lines) {
       const p = document.createElement('p'); p.className = 'line'
       for (const w of l.words) {

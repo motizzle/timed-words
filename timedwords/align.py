@@ -8,8 +8,8 @@
 read against the whole recording. --words N: the recording says only the first N words; the rest are stamped
 at the last word's end with no length, which a player reads as unsung.
 
-WHAT IT NEEDS: four packages, all free, and ffmpeg. About 2 GB of models
-download on the first run and are cached:
+WHAT IT NEEDS: four packages and ffmpeg. About 2 GB of models download on
+the first run and are cached; their licenses are in the README:
 
     pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
     pip install transformers uroman
@@ -27,8 +27,8 @@ whole phrase onto the wrong repeat.
 
 SO THE TAPE IS ASKED FIRST, AND THE MODELS ONLY SAY WHICH WORD:
 
-  1. Pauses. Every stretch of silence >= 0.12 s at 20 dB under the clip's own
-     peak. That Haftarah has 122 unbroken stretches of sound for 118
+  1. Pauses. Every stretch of silence >= 0.12 s at 20 dB under the clip's
+     95th-percentile level. That Haftarah has 122 unbroken stretches of sound for 118
      words, so the tape all but names its own boundaries.
   2. Two aligners, independently. `torchaudio` MMS_FA over uroman-romanised
      Hebrew, and a Hebrew-native wav2vec2 CTC model over the letters
@@ -50,11 +50,15 @@ WHAT IT CHECKS, AND WHY EACH CHECK MEASURES SOMETHING:
      independent of both. On the Haftarah it agreed with the shipped time on
      all twelve, ten of them inside 70 ms.
 
-  The gate FAILS if the word count does not match the reading, if the times are
-  not strictly increasing, if any word is sung during a pause, or if fewer than
-  90% of words are within 200 ms of an aligner.
+  A word is accepted when either aligner is within 200 ms of it (B), or the dip
+  is within 100 ms (C); any other word, and any word whose recheck failed, is
+  unverified and listed to be checked by ear.
 
-COST: nothing. Both models are free and run locally.
+  The gate FAILS if the word count does not match the reading, if the times are
+  not strictly increasing, if any word overlaps the pauses by more than 0.12 s,
+  if more than 4 words are unverified, or if no recheck ran at all.
+
+COST: nothing. Both models run locally.
 """
 import argparse, json, re, subprocess, statistics, sys
 from pathlib import Path
@@ -91,12 +95,14 @@ def decode(path, t0=None, t1=None):
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     return np.frombuffer(raw, dtype=np.float32).copy()
 
-def pauses(x, min_len=0.12, drop=20.0, hop=0.02):
-    """Silence >= min_len, at `drop` dB under the clip's 95th-percentile level."""
+def pauses(x, min_len=0.12, drop=20.0, hop=0.02, floor=-70.0):
+    """Silence >= min_len, at `drop` dB under the clip's 95th-percentile level. Anything under `floor` dBFS is
+    silence too: in a clip that is mostly silence, the 95th percentile is the silence itself."""
     win = int(hop * SR); n = len(x) // win
+    if not n: return []
     e = np.sqrt((x[:n * win].astype(np.float64) ** 2).reshape(n, win).mean(1))
     db = 20 * np.log10(np.maximum(e, 1e-9))
-    thr = np.percentile(db, 95) - drop
+    thr = max(np.percentile(db, 95) - drop, floor)
     quiet = db < thr
     out = []; i = 0
     while i < n:
@@ -144,6 +150,7 @@ class Mms:
 
     def __call__(self, wav, words):
         toks = [self.token(w) for w in words]
+        if not toks: raise ValueError('no words')
         if not all(toks): raise ValueError('a word romanised to nothing')
         t = torch.from_numpy(wav).unsqueeze(0)
         with torch.inference_mode():
@@ -174,6 +181,7 @@ class Hebrew:
 
     def __call__(self, wav, words):
         per = [self.ids(w) for w in words]
+        if not per: raise ValueError('no words')
         if not all(per): raise ValueError('a word has no Hebrew letters')
         targets = []; owner = []
         for i, ids in enumerate(per):
@@ -334,13 +342,18 @@ def check(words, starts, ends, ps, rows, db, hop, log=print):
     overlap = [sum(max(0, min(e, b) - max(s, a)) for a, b in ps) for s, e in zip(starts, ends)]
     sung_in_silence = [i for i, v in enumerate(overlap) if v > 0.12]
     if sung_in_silence: problems.append(f'{len(sung_in_silence)} words are sung during a pause: {sung_in_silence}')
-    near = [min(abs(starts[i] - sm), abs(starts[i] - sh)) for i, sm, sh in rows if sm is not None]
+    heard = [(i, sm, sh) for i, sm, sh in rows if sm is not None]
+    threw = [i for i, sm, sh in rows if sm is None]
+    if not heard:
+        problems.append('every recheck failed, so no word was checked')
+        return problems, threw
+    near = [min(abs(starts[i] - sm), abs(starts[i] - sh)) for i, sm, sh in heard]
     within100 = sum(1 for v in near if v <= 0.100)
     within200 = sum(1 for v in near if v <= 0.200)
     log(f'  A  no word sung during a pause: worst {max(overlap)*1000:.0f} ms')
     log(f'  B  nearest aligner: median {statistics.median(near)*1000:.0f} ms, '
         f'within 100 ms {within100}/{len(near)}, within 200 ms {within200}/{len(near)}')
-    far = [(i, sm, sh) for (i, sm, sh), v in zip(rows, near) if v > 0.200]
+    far = [(i, sm, sh) for (i, sm, sh), v in zip(heard, near) if v > 0.200]
     unverified = []
     for i, sm, sh in far:
         t = dip(db, hop, min(sm, sh, starts[i]), max(sm, sh, starts[i]))
@@ -350,8 +363,10 @@ def check(words, starts, ends, ps, rows, db, hop, log=print):
     # THE RULE, stated before the run rather than fitted to it: a word is
     # accepted when TWO of the three witnesses agree with the shipped time --
     # either aligner inside 200 ms, or the waveform's own dip inside 100 ms. A
-    # word with neither is unverified, and listed for a person to check.
-    log(f'  ACCEPTED {len(near) - len(unverified)} of {len(near)} words; '
+    # word with neither is unverified, and listed for a person to check. So is
+    # a word whose recheck threw: nothing witnessed it.
+    unverified = sorted(unverified + threw)
+    log(f'  ACCEPTED {len(rows) - len(unverified)} of {len(rows)} words; '
         f'unverified: {unverified if unverified else "none"}')
     if len(unverified) > 4:
         problems.append(f'{len(unverified)} words are backed by no second witness: {unverified}')

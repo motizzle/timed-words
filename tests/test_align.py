@@ -27,4 +27,29 @@ assert len(ps) == 1 and abs(ps[0][0] - 1.0) < 0.05 and abs(ps[0][1] - 1.5) < 0.0
 
 t = A.timing(['a', 'b', 'c'], [0.5, 1.25], [1.0, 2.0], off=10)
 assert t == {'words': ['a', 'b', 'c'], 'starts': [10.5, 11.25, 12.0], 'ends': [11.0, 12.0, 12.0]}, t
+# a recording shorter than one 20 ms frame has no pauses, and does not crash
+assert A.pauses(np.zeros(100, np.float32)) == []
+
+# mostly silence with one click: the silence is still a pause
+y = np.zeros(2 * sr, np.float32); y[sr:sr + 160] = 0.8
+assert any(b - a >= 0.5 for a, b in A.pauses(y)), A.pauses(y)
+
+# no words is an error, never a pass
+class Rom: romanize_string = lambda self, w, lcode: w
+mms = A.Mms.__new__(A.Mms); mms.rom = Rom()
+try:
+    mms(np.zeros(sr, np.float32), []); raise SystemExit('Mms passed an empty word list')
+except ValueError:
+    pass
+
+# a recheck that threw counts as unverified, and never shifts another word's score onto it
+db = np.full(200, -20.0); hop = 0.01
+starts = [0.1, 0.5, 1.0]; ends = [0.4, 0.9, 1.5]
+rows = [(0, None, None), (1, 0.5, 0.5), (2, 1.6, 1.6)]
+problems, unverified = A.check(['a', 'b', 'c'], starts, ends, [], rows, db, hop, log=lambda *a: None)
+assert 0 in unverified and 1 not in unverified, unverified
+
+# every recheck threw: fail loudly
+problems, unverified = A.check(['a', 'b'], [0.1, 0.5], [0.4, 0.9], [], [(0, None, None), (1, None, None)], db, hop, log=lambda *a: None)
+assert problems, 'every recheck threw, and the gate passed'
 print('align test: every part holds')

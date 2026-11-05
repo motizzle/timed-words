@@ -21,14 +21,13 @@ HOW, and what each step was measured to fix on the trial songs:
   6. A word or two left after a breath at a line's end moves to the next line (rehome).
 
 WHAT IT NEEDS: torch (cpu), demucs, soundfile, faster-whisper, transformers; ffmpeg. About 2 GB of models download on
-first run. Free and local.
+first run; their licenses are in the README. Everything runs locally.
 """
 import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 import numpy as np
 
-BIN = Path(sys.executable).parent
 SR = 16000
 MODEL = 'large-v3-turbo'
 HOW = f'whisper {MODEL} on the demucs voice track'
@@ -40,7 +39,7 @@ QUIET = {**os.environ, 'OMP_NUM_THREADS': str(THREADS), 'MKL_NUM_THREADS': str(T
 def voice(wav, d):
     out = d / 'vocals.wav'
     if not out.exists():
-        subprocess.run(['nice', '-n', '19', BIN / 'python', '-m', 'demucs', '--two-stems', 'vocals', '-n', 'htdemucs', '-o', d / 'sep', wav],
+        subprocess.run(['nice', '-n', '19', sys.executable, '-m', 'demucs', '--two-stems', 'vocals', '-n', 'htdemucs', '-o', d / 'sep', wav],
                        check=True, capture_output=True, env=QUIET)
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', d / 'sep/htdemucs/audio/vocals.wav', '-ac', '1', '-ar', str(SR), out], check=True)
         shutil.rmtree(d / 'sep')
@@ -117,7 +116,7 @@ PUNCT_ = None
 
 def punctuate(words, language):
     """English that Whisper heard without stops or commas, punctuated the way the song is sung: Whisper's own mark
-    where it put one, else the punctuation model's (oliverguhr/fullstop-punctuation-multilang-large, free and local).
+    where it put one, else the punctuation model's (oliverguhr/fullstop-punctuation-multilang-large, run locally).
     Marks only ever follow a word, so each word keeps its time. Other languages pass through as heard."""
     if language != 'en' or not words:
         return words
