@@ -60,7 +60,7 @@ The models are not part of this repository. Each downloads from its maker on the
 | Demucs `htdemucs` | `song` | MIT |
 | `oliverguhr/fullstop-punctuation-multilang-large` | `song` | MIT |
 | Meta's MMS aligner (`torchaudio.pipelines.MMS_FA`) | `song`, `align` | CC-BY-NC 4.0: not for commercial use |
-| `imvladikon/wav2vec2-xls-r-300m-hebrew` | `align` | none stated by its author |
+| `imvladikon/wav2vec2-large-xlsr-53-hebrew` | `align` | Apache 2.0 |
 
 So `talk` can be used for anything; `song` and `align` rely on a model that is not for commercial use.
 

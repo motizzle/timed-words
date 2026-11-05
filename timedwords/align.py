@@ -28,12 +28,12 @@ whole phrase onto the wrong repeat.
 SO THE TAPE IS ASKED FIRST, AND THE MODELS ONLY SAY WHICH WORD:
 
   1. Pauses. Every stretch of silence >= 0.12 s at 20 dB under the clip's
-     95th-percentile level. That Haftarah has 122 unbroken stretches of sound for 118
-     words, so the tape all but names its own boundaries.
+     95th-percentile level. That Haftarah has 64 unbroken stretches of sound for 118
+     words, so the tape itself names where half the words start.
   2. Two aligners, independently. `torchaudio` MMS_FA over uroman-romanised
      Hebrew, and a Hebrew-native wav2vec2 CTC model over the letters
      themselves. Neither is trusted for a timestamp; they are used to decide
-     WHICH stretch of sound each word is in, and they agreed on 112 of 118.
+     WHICH stretch of sound each word is in, and they agreed on 117 of 118.
   3. The boundary comes from the waveform. A word first in its stretch starts
      on the frame the sound resumes. Words sharing a stretch are divided at the
      deepest energy dip between the two aligners' answers — a stop closing, a
@@ -45,10 +45,10 @@ WHAT IT CHECKS, AND WHY EACH CHECK MEASURES SOMETHING:
 
   A  No word may be sung during a pause. Overlap in ms, per word. Zero here.
   B  Both aligners are re-run per word in a bounded window and compared to the
-     shipped time. 97 of 118 within 100 ms, 106 within 200 ms on the Haftarah.
+     shipped time. 110 of 118 within 100 ms, 115 within 200 ms on the Haftarah.
   C  For every word the aligners dispute, the energy dip is a third witness,
      independent of both. On the Haftarah it agreed with the shipped time on
-     all twelve, ten of them inside 70 ms.
+     all three.
 
   A word is accepted when either aligner is within 200 ms of it (B), or the dip
   is within 100 ms (C); any other word, and any word whose recheck failed, is
@@ -72,7 +72,7 @@ from transformers import AutoProcessor, AutoModelForCTC
 
 torch.set_num_threads(8)
 SR = 16000
-HEB_MODEL = 'imvladikon/wav2vec2-xls-r-300m-hebrew'
+HEB_MODEL = 'imvladikon/wav2vec2-large-xlsr-53-hebrew'
 
 # ── the reading ──────────────────────────────────────────────────────────────
 # te'amim, paseq, sof pasuq and the editorial markers go; nikud and maqaf stay.
