@@ -15,6 +15,7 @@ for name in ('torch', 'torchaudio', 'torchaudio.functional', 'uroman', 'transfor
 sys.modules['torchaudio'].functional = sys.modules['torchaudio.functional']
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from timedwords import align as A  # noqa: E402
+real_decode = A.decode
 
 assert A.reading_words('אַתָּ֣ה בֶן־אָדָ֗ם הַגֵּ֤ד׃ (פ) וּמָדְד֖וּ') == ['אַתָּה', 'בֶן־אָדָם', 'הַגֵּד', 'וּמָדְדוּ'], 'cantillation goes, maqaf stays, an editorial note goes'
 assert len(A.verses('א ב׃ ג ד׃ ')) == 2
@@ -52,6 +53,15 @@ assert 0 in unverified and 1 not in unverified, unverified
 # every recheck threw: fail loudly
 problems, unverified = A.check(['a', 'b'], [0.1, 0.5], [0.4, 0.9], [], [(0, None, None), (1, None, None)], db, hop, log=lambda *a: None)
 assert problems, 'every recheck threw, and the gate passed'
+# a recording with no sound in it fails with a reason, never an IndexError
+A.decode = lambda *a: np.full(sr, 1e-4, np.float32)
+try:
+    A.align('x', ['a'], log=lambda *a: None); raise SystemExit('align timed a silent recording')
+except ValueError as e:
+    assert 'no sound' in str(e), e
+finally:
+    A.decode = real_decode
+
 # a word both aligners first put after a pause stays after it, though its re-ask lands before it
 full = np.concatenate([tone(1.0), np.zeros(int(0.2 * sr), np.float32), tone(3.8)])
 class Stub:

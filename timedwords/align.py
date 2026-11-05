@@ -238,6 +238,7 @@ def which_region(v, reg):
 def align(audio, words, t0=None, t1=None, log=print):
     x = decode(audio, t0, t1)
     ps = pauses(x); reg = regions(x); db, hop = envelope(x)
+    if not reg: raise ValueError('no sound to time: the recording is silence, or quieter than -70 dBFS')
     log(f'  {len(x)/SR:.1f} s, {len(ps)} pauses, {len(reg)} stretches of sound, {len(words)} words')
 
     mms, heb = Mms(), Hebrew()
