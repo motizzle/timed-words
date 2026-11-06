@@ -10,7 +10,8 @@ for name in ('torch', 'torchaudio', 'torchaudio.functional', 'uroman', 'transfor
         try:
             __import__(name)
         except ImportError:
-            m = types.ModuleType(name); m.set_num_threads = lambda n: None; m.AutoProcessor = m.AutoModelForCTC = object
+            m = types.ModuleType(name); m.set_num_threads = lambda n: None
+            m.AutoModelForCTC = m.Wav2Vec2FeatureExtractor = m.Wav2Vec2Processor = object
             sys.modules[name] = m
 sys.modules['torchaudio'].functional = sys.modules['torchaudio.functional']
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -76,5 +77,10 @@ finally:
     A.decode, A.Mms, A.Hebrew = real
 starts = out[5]
 assert starts[1] >= 1.2, f'b crossed the pause back to {starts[1]:.2f}'
+
+# romanised Hebrew becomes the phoneme model's symbols: digraphs first, the glottal stop, the uvular r
+assert A.sounds("hari'u") == ['h', 'a', 'ʁ', 'i', 'ʔ', 'u'], A.sounds("hari'u")
+assert A.sounds('beshimechah') == ['b', 'e', 'ʃ', 'i', 'm', 'e', 'χ', 'a', 'h']
+assert A.sounds('vetson') == ['v', 'e', 'ts', 'o', 'n'] and A.sounds('kl-haarets') == ['k', 'l', 'h', 'a', 'a', 'ʁ', 'e', 'ts']
 
 print('align test: every part holds')

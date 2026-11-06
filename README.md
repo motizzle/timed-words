@@ -59,10 +59,12 @@ The models are not part of this repository. Each downloads from its maker on the
 | Whisper `small` and `large-v3-turbo`, as converted for faster-whisper | `talk`, `song` | MIT |
 | Demucs `htdemucs` | `song` | MIT |
 | `oliverguhr/fullstop-punctuation-multilang-large` | `song` | MIT |
-| Meta's MMS aligner (`torchaudio.pipelines.MMS_FA`) | `song`, `align` | CC-BY-NC 4.0: not for commercial use |
-| `imvladikon/wav2vec2-large-xlsr-53-hebrew` | `align` | Apache 2.0 |
+| `facebook/wav2vec2-large-960h-lv60-self` | `song` (English) | Apache 2.0 |
+| `facebook/wav2vec2-xlsr-53-espeak-cv-ft` | `song` (other languages) | Apache 2.0 |
+| Meta's MMS aligner (`torchaudio.pipelines.MMS_FA`) | `align` | CC-BY-NC 4.0: not for commercial use |
+| `imvladikon/wav2vec2-xls-r-300m-lm-hebrew` | `align` | Apache 2.0 |
 
-So `talk` can be used for anything; `song` and `align` rely on a model that is not for commercial use.
+So `talk` and `song` can be used for anything; `align` relies on a model that is not for commercial use.
 
 This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences
 Institute (2015-2020).

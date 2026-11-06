@@ -45,10 +45,10 @@ WHAT IT CHECKS, AND WHY EACH CHECK MEASURES SOMETHING:
 
   A  No word may be sung during a pause. Overlap in ms, per word. Zero here.
   B  Both aligners are re-run per word in a bounded window and compared to the
-     shipped time. 110 of 118 within 100 ms, 115 within 200 ms on the Haftarah.
+     shipped time. 108 of 118 within 100 ms, 113 within 200 ms on the Haftarah.
   C  For every word the aligners dispute, the energy dip is a third witness,
      independent of both. On the Haftarah it agreed with the shipped time on
-     all three.
+     all five.
 
   A word is accepted when either aligner is within 200 ms of it (B), or the dip
   is within 100 ms (C); any other word, and any word whose recheck failed, is
@@ -68,11 +68,14 @@ import torch
 import torchaudio
 import torchaudio.functional as AF
 import uroman as ur
-from transformers import AutoProcessor, AutoModelForCTC
+from transformers import AutoModelForCTC, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
 
 torch.set_num_threads(8)
 SR = 16000
-HEB_MODEL = 'imvladikon/wav2vec2-large-xlsr-53-hebrew'
+# the author's Apache 2.0 release of wav2vec2-xls-r-300m-hebrew: the same weights, sha256 75c4e535…
+HEB_MODEL = 'imvladikon/wav2vec2-xls-r-300m-lm-hebrew'
+PHON_MODEL = 'facebook/wav2vec2-xlsr-53-espeak-cv-ft'      # Apache 2.0: speech sounds, any language
+ENG_MODEL = 'facebook/wav2vec2-large-960h-lv60-self'       # Apache 2.0: English letters
 
 # ── the reading ──────────────────────────────────────────────────────────────
 # te'amim, paseq, sof pasuq and the editorial markers go; nikud and maqaf stay.
@@ -164,7 +167,7 @@ class Hebrew:
     `do_normalize` is True on its feature extractor and raw audio degrades it
     badly."""
     def __init__(self):
-        self.proc = AutoProcessor.from_pretrained(HEB_MODEL)
+        self.proc = Wav2Vec2Processor.from_pretrained(HEB_MODEL)   # its repo also names a language-model decoder, never used
         self.model = AutoModelForCTC.from_pretrained(HEB_MODEL).eval()
         v = self.proc.tokenizer.get_vocab()
         self.vocab = v; self.blank = v['[PAD]']; self.sep = v['|']
@@ -199,6 +202,74 @@ class Hebrew:
             s, e = sp.start * ratio / SR, sp.end * ratio / SR
             out[i] = (out[i][0], e) if i in out else (s, e)
         return [out[i] for i in range(len(words))]
+
+class _Ctc:
+    """A CTC model aligning words it knows as token ids; Mms's interface: token(word) and (wav, words) -> [(start, end)]."""
+    sep = None
+    def __init__(self, name):
+        from huggingface_hub import hf_hub_download
+        self.fe = Wav2Vec2FeatureExtractor.from_pretrained(name)
+        self.model = AutoModelForCTC.from_pretrained(name).eval()
+        self.vocab = json.load(open(hf_hub_download(name, 'vocab.json')))   # read whole: the phoneme repo's tokenizer wants espeak
+        self.blank = self.model.config.pad_token_id
+
+    def token(self, w):
+        return ' '.join(str(i) for i in self.ids(w))
+
+    def __call__(self, wav, words):
+        per = [self.ids(w) for w in words]
+        if not per: raise ValueError('no words')
+        if not all(per): raise ValueError('a word has no sounds this model knows')
+        targets, owner = [], []
+        for i, ids in enumerate(per):
+            if i and self.sep is not None: targets.append(self.sep); owner.append(-1)
+            for t in ids: targets.append(t); owner.append(i)
+        iv = torch.from_numpy(self.fe(wav, sampling_rate=SR, return_tensors='np').input_values)
+        with torch.inference_mode():
+            lg = self.model(iv).logits
+        lp = torch.log_softmax(lg, -1); ratio = iv.shape[1] / lg.shape[1]
+        al, sc = AF.forced_align(lp, torch.tensor([targets]), blank=self.blank)
+        spans = AF.merge_tokens(al[0], sc[0], blank=self.blank)
+        if len(spans) != len(targets): raise ValueError(f'{len(spans)} spans for {len(targets)} targets')
+        out = {}
+        for k, sp in enumerate(spans):
+            i = owner[k]
+            if i < 0: continue
+            s, e = sp.start * ratio / SR, sp.end * ratio / SR
+            out[i] = (out[i][0], e) if i in out else (s, e)
+        return [out[i] for i in range(len(words))]
+
+# romanised letters to the phoneme model's symbols, longest first
+_IPA = [('sh', 'ʃ'), ('ch', 'χ'), ('kh', 'χ'), ('tz', 'ts'), ('ts', 'ts'), ("'", 'ʔ'), ('g', 'ɡ'), ('r', 'ʁ'),
+        ('y', 'j'), ('w', 'v'), ('q', 'k'), ('c', 'k'), ('x', 'k s'), ('j', 'dʒ')]
+
+def sounds(roman):
+    """uroman's lower-case romanisation as the phoneme model's symbols."""
+    r = re.sub(r"[^a-z']", '', roman.lower()); out = []; i = 0
+    while i < len(r):
+        for a, b in _IPA:
+            if r.startswith(a, i):
+                out += b.split(); i += len(a); break
+        else:
+            out.append(r[i]); i += 1
+    return out
+
+class Phonemes(_Ctc):
+    """Any language: uroman's romanisation, heard as speech sounds. Measured against Meta's MMS_FA on Sinai's own
+    timings of ten cantor pieces (410 words): the same median, 32 ms, and on the 18 words they disagree, 9 each."""
+    def __init__(self, lcode='heb'):
+        super().__init__(PHON_MODEL); self.rom = ur.Uroman(); self.lcode = lcode
+
+    def ids(self, w):
+        return [self.vocab[p] for p in sounds(self.rom.romanize_string(w, lcode=self.lcode)) if p in self.vocab]
+
+class English(_Ctc):
+    """English, over its spelling."""
+    def __init__(self):
+        super().__init__(ENG_MODEL); self.sep = self.vocab['|']
+
+    def ids(self, w):
+        return [self.vocab[c] for c in re.sub(r"[^A-Z']", '', w.upper()) if c in self.vocab]
 
 # ── the pass that narrows ────────────────────────────────────────────────────
 def segments(times, ps, max_words=6, max_secs=14.0, min_pause=0.30):

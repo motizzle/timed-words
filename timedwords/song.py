@@ -1,5 +1,5 @@
 """song.py: a song's words and when each word is sung, from its recording. The voice is lifted off the band, heard
-by Whisper, set in lines as a lyric sheet sets them, and each word timed by the chant aligner's model.
+by Whisper, set in lines as a lyric sheet sets them, and each word timed by an open aligner.
 
     from timedwords import song
     song.song('recording.mp3', hints='the title, names Whisper mishears')   # {language, lines, held}
@@ -16,8 +16,9 @@ HOW, and what each step was measured to fix on the trial songs:
      one cut at its comma or before a joining word, never on "the"; a capital starts a sentence unless it carries on
      a name. The gaps between sung words are nearly all zero, so time alone cannot find the line.
   4. A line the voice track is quiet under is dropped: that is Whisper hearing words in the band.
-  5. Each word's start and end, for the singalong to light word by word: the chant aligner's MMS model
-     aligns each line's own words inside that line's stretch of the voice (Whisper's times where it can't).
+  5. Each word's start and end, for the singalong to light word by word: an open aligner (English, or speech
+     sounds for any other language) aligns each line's own words inside that line's stretch of the voice
+     (Whisper's times where it can't).
   6. A word or two left after a breath at a line's end moves to the next line (rehome).
 
 WHAT IT NEEDS: torch (cpu), demucs, soundfile, faster-whisper, transformers; ffmpeg. About 2 GB of models download on
@@ -262,18 +263,29 @@ def rehome(lines):
     return out
 
 
-MMS_ = None
+ALIGNERS_ = {}
+LCODE = {'he': 'heb', 'yi': 'yid', 'es': 'spa', 'fr': 'fra', 'de': 'deu', 'tr': 'tur', 'ru': 'rus', 'ar': 'ara'}
 
 
-def timed_words(lines, vocals):
-    """Each line's words with their start and end, by forced alignment of the line's own words inside its
-    stretch of the voice track: the chant aligner's MMS model (align.py).
-    A line the aligner cannot place (a word with no letters, a stretch too short) keeps Whisper's own word times."""
-    global MMS_
-    import soundfile as sf
-    if MMS_ is None:
+def aligner(language):
+    """English songs by the English letter model, every other language by the phoneme model (align.py). On 79 songs
+    whose every word start was marked by hand, they light fewer words more than 0.3 s off than Meta's MMS_FA in
+    English (2.5% against 5.3%), German and Spanish, and more in French (4.0% against 3.3%)."""
+    key = 'en' if language == 'en' else 'other'
+    if key not in ALIGNERS_:
         from . import align
-        MMS_ = align.Mms()
+        ALIGNERS_[key] = align.English() if key == 'en' else align.Phonemes()
+    a = ALIGNERS_[key]
+    if key == 'other': a.lcode = LCODE.get(language)
+    return a
+
+
+def timed_words(lines, vocals, language='en'):
+    """Each line's words with their start and end, by forced alignment of the line's own words inside its
+    stretch of the voice track (aligner, above).
+    A line the aligner cannot place (a word with no letters, a stretch too short) keeps Whisper's own word times."""
+    import soundfile as sf
+    al = aligner(language)
     wav, sr = sf.read(vocals, dtype='float32')
     end = len(wav) / sr
     out = []
@@ -283,9 +295,9 @@ def timed_words(lines, vocals):
         t1 = min(end, lines[i + 1]['start'] if i + 1 < len(lines) else l['start'] + 1.2 * len(words) + 2)
         l = dict(l)
         try:
-            if t1 - t0 < 0.15 * len(words) or not all(MMS_.token(w) for w in words):
+            if t1 - t0 < 0.15 * len(words) or not all(al.token(w) for w in words):
                 raise ValueError('no room or no letters')
-            spans = MMS_(wav[int(t0 * sr):int(t1 * sr)], words)
+            spans = al(wav[int(t0 * sr):int(t1 * sr)], words)
             ws = [{'start': round(t0 + s, 2), 'end': round(t0 + e, 2), 'text': w} for w, (s, e) in zip(words, spans)]
             if any(a['start'] > b['start'] for a, b in zip(ws, ws[1:])):
                 raise ValueError('out of order')
@@ -335,7 +347,7 @@ def song(path, hints=''):
         subprocess.run(['ffmpeg', '-v', 'error', '-threads', str(THREADS), '-y', '-i', path, '-ac', '2', '-ar', '44100', wav], check=True)
         v = voice(wav, d)
         heard = words_of(v, d, hints)
-        entry = sung({'how': HOW, 'language': heard['language'], 'lines': rehome(timed_words(lines_of(heard['words'], loudness(v), heard['language']), v))})
+        entry = sung({'how': HOW, 'language': heard['language'], 'lines': rehome(timed_words(lines_of(heard['words'], loudness(v), heard['language']), v, heard['language']))})
         return {**entry, 'held': held(entry)}
 
 
