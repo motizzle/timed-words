@@ -78,6 +78,13 @@ finally:
 starts = out[5]
 assert starts[1] >= 1.2, f'b crossed the pause back to {starts[1]:.2f}'
 
+# a stretch of sound can open on the previous word's tail: when both models put the first word of a stretch well
+# inside it, the word starts where they say; when they agree with the onset, the onset stands
+flat = np.full(600, -30.0)
+assert A.pick_start(True, 1.2, 2.90, 2.95, flat, 0.01)[0] > 2.8, 'snapped to the stretch, 1.7 s before both models'
+assert A.pick_start(True, 1.2, 1.25, 1.30, flat, 0.01) == (1.2, 'onset')
+assert A.pick_start(True, 1.2, 2.0, 2.9, flat, 0.01) == (1.2, 'onset'), 'models that disagree do not overrule the onset'
+
 # romanised Hebrew becomes the phoneme model's symbols: digraphs first, the glottal stop, the uvular r
 assert A.sounds("hari'u") == ['h', 'a', 'ʁ', 'i', 'ʔ', 'u'], A.sounds("hari'u")
 assert A.sounds('beshimechah') == ['b', 'e', 'ʃ', 'i', 'm', 'e', 'χ', 'a', 'h']
