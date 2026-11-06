@@ -60,11 +60,10 @@ The models are not part of this repository. Each downloads from its maker on the
 | Demucs `htdemucs` | `song` | MIT |
 | `oliverguhr/fullstop-punctuation-multilang-large` | `song` | MIT |
 | `facebook/wav2vec2-large-960h-lv60-self` | `song` (English) | Apache 2.0 |
-| `facebook/wav2vec2-xlsr-53-espeak-cv-ft` | `song` (other languages) | Apache 2.0 |
-| Meta's MMS aligner (`torchaudio.pipelines.MMS_FA`) | `align` | CC-BY-NC 4.0: not for commercial use |
+| `facebook/wav2vec2-xlsr-53-espeak-cv-ft` | `song` (other languages), `align` | Apache 2.0 |
 | `imvladikon/wav2vec2-xls-r-300m-lm-hebrew` | `align` | Apache 2.0 |
 
-So `talk` and `song` can be used for anything; `align` relies on a model that is not for commercial use.
+Every model is under an open license that allows commercial use.
 
 This project uses the universal romanizer software 'uroman' written by Ulf Hermjakob, USC Information Sciences
 Institute (2015-2020).
