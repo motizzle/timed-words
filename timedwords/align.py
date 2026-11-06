@@ -30,8 +30,8 @@ SO THE TAPE IS ASKED FIRST, AND THE MODELS ONLY SAY WHICH WORD:
   1. Pauses. Every stretch of silence >= 0.12 s at 20 dB under the clip's
      95th-percentile level. That Haftarah has 64 unbroken stretches of sound for 118
      words, so the tape itself names where half the words start.
-  2. Two aligners, independently. `torchaudio` MMS_FA over uroman-romanised
-     Hebrew, and a Hebrew-native wav2vec2 CTC model over the letters
+  2. Two aligners, independently. A speech-sound model over uroman-romanised
+     Hebrew (Phonemes), and a Hebrew-native wav2vec2 CTC model over the letters
      themselves. Neither is trusted for a timestamp; they are used to decide
      WHICH stretch of sound each word is in, and they agreed on 117 of 118.
   3. The boundary comes from the waveform. A word first in its stretch starts
@@ -139,29 +139,6 @@ def dip(db, hop, t0, t1, pad=0.06):
     return (a + int(np.argmin(db[a:b]))) * hop
 
 # ── the two aligners ─────────────────────────────────────────────────────────
-class Mms:
-    """MMS_FA over romanised Hebrew. Trained on 1,130 languages, none of them
-    pointed Hebrew, which is why it is one witness and not the answer."""
-    def __init__(self):
-        b = torchaudio.pipelines.MMS_FA
-        self.model = b.get_model(with_star=False)
-        self.tok = b.get_tokenizer(); self.al = b.get_aligner()
-        self.rom = ur.Uroman()
-
-    def token(self, w):
-        return re.sub(r"[^a-z']", '', self.rom.romanize_string(w, lcode='heb').lower())
-
-    def __call__(self, wav, words):
-        toks = [self.token(w) for w in words]
-        if not toks: raise ValueError('no words')
-        if not all(toks): raise ValueError('a word romanised to nothing')
-        t = torch.from_numpy(wav).unsqueeze(0)
-        with torch.inference_mode():
-            em, _ = self.model(t)
-            spans = self.al(em[0], self.tok(toks))
-        r = t.shape[1] / em.shape[1] / SR
-        return [(s[0].start * r, s[-1].end * r) for s in spans]
-
 class Hebrew:
     """A Hebrew-trained CTC model, over the letters themselves — no romanising.
     `do_normalize` is True on its feature extractor and raw audio degrades it
@@ -204,7 +181,7 @@ class Hebrew:
         return [out[i] for i in range(len(words))]
 
 class _Ctc:
-    """A CTC model aligning words it knows as token ids; Mms's interface: token(word) and (wav, words) -> [(start, end)]."""
+    """A CTC model aligning words it knows as token ids: token(word) and (wav, words) -> [(start, end)]."""
     sep = None
     def __init__(self, name):
         from huggingface_hub import hf_hub_download
@@ -312,9 +289,9 @@ def align(audio, words, t0=None, t1=None, log=print):
     if not reg: raise ValueError('no sound to time: the recording is silence, or quieter than -70 dBFS')
     log(f'  {len(x)/SR:.1f} s, {len(ps)} pauses, {len(reg)} stretches of sound, {len(words)} words')
 
-    mms, heb = Mms(), Hebrew()
+    phon, heb = Phonemes(), Hebrew()
     seed = [(i * len(x) / SR / len(words), (i + 1) * len(x) / SR / len(words)) for i in range(len(words))]
-    m = pass_over(mms, x, words, seed, ps)
+    m = pass_over(phon, x, words, seed, ps)
     h = pass_over(heb, x, words, m, ps)
     agree = sum(1 for a, b in zip(m, h) if which_region(a[0], reg) == which_region(b[0], reg))
     log(f'  the two aligners put {agree} of {len(words)} words in the same stretch')
@@ -346,7 +323,7 @@ def align(audio, words, t0=None, t1=None, log=print):
     #    A window with unambiguous ends is the smallest question there is, and
     #    it is where the repeated measurement passages of Ezekiel 43 resolve.
     for _ in range(2):
-        rows = audit(mms, heb, x, words, starts)
+        rows = audit(phon, heb, x, words, starts)
         far = [(i, sm, sh) for i, sm, sh in rows
                if sm is not None and min(abs(starts[i] - sm), abs(starts[i] - sh)) > 0.200]
         moved = 0
@@ -394,7 +371,7 @@ def close(words, idx, starts, reg):
     return starts, ends
 
 # ── the gates ────────────────────────────────────────────────────────────────
-def audit(mms, heb, x, words, starts, log=print):
+def audit(phon, heb, x, words, starts, log=print):
     """Ask both aligners again, one word at a time, in a bounded window."""
     end = len(x) / SR; rows = []
     for i in range(len(words)):
@@ -404,7 +381,7 @@ def audit(mms, heb, x, words, starts, log=print):
         ws = words[max(0, i - 1):min(len(words), i + 2)]
         k = 1 if i else 0
         try:
-            sm = mms(x[a:b], ws)[k][0] + a / SR
+            sm = phon(x[a:b], ws)[k][0] + a / SR
             sh = heb(x[a:b], ws)[k][0] + a / SR
         except Exception:
             rows.append((i, None, None)); continue
@@ -471,7 +448,7 @@ def main():
     x, reg, ps, db, hop, starts, ends, how, m, h = align(a.audio, words, a.t0, a.t1)
     from collections import Counter
     print('  boundaries from:', dict(Counter(how)))
-    rows = audit(Mms(), Hebrew(), x, words, starts)
+    rows = audit(Phonemes(), Hebrew(), x, words, starts)
     problems, unverified = check(words, starts, ends, ps, rows, db, hop)
     if problems:
         for p in problems: print('align: ' + p, file=sys.stderr)

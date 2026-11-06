@@ -38,9 +38,9 @@ assert any(b - a >= 0.5 for a, b in A.pauses(y)), A.pauses(y)
 
 # no words is an error, never a pass
 class Rom: romanize_string = lambda self, w, lcode: w
-mms = A.Mms.__new__(A.Mms); mms.rom = Rom()
+mms = A.Phonemes.__new__(A.Phonemes); mms.rom = Rom(); mms.lcode = 'heb'; mms.vocab = {}
 try:
-    mms(np.zeros(sr, np.float32), []); raise SystemExit('Mms passed an empty word list')
+    mms(np.zeros(sr, np.float32), []); raise SystemExit('the first witness passed an empty word list')
 except ValueError:
     pass
 
@@ -69,12 +69,12 @@ class Stub:
     def __call__(self, wav, words):
         if len(wav) == len(full): return [(0.1, 0.9), (1.4, 3.0), (3.1, 4.9)][:len(words)]
         return [(0.2, 0.4), (0.5, 0.8), (0.85, 0.95)][:len(words)]
-real = A.decode, A.Mms, A.Hebrew
-A.decode, A.Mms, A.Hebrew = (lambda *a: full), Stub, Stub
+real = A.decode, A.Phonemes, A.Hebrew
+A.decode, A.Phonemes, A.Hebrew = (lambda *a: full), Stub, Stub
 try:
     out = A.align('x', ['a', 'b', 'c'], log=lambda *a: None)
 finally:
-    A.decode, A.Mms, A.Hebrew = real
+    A.decode, A.Phonemes, A.Hebrew = real
 starts = out[5]
 assert starts[1] >= 1.2, f'b crossed the pause back to {starts[1]:.2f}'
 
