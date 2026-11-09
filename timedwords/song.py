@@ -105,6 +105,8 @@ def loudness(vocals):
     return 20 * np.log10(np.sqrt((frames ** 2).mean(1)) + 1e-9)
 
 
+# words that never end a phrase: what follows them is the rest of it, capital or not
+LEADS = {'a', 'an', 'the', 'my', 'your', 'our', 'their', 'his'}
 DANGLING = {'a', 'an', 'the', 'to', 'of', 'with', 'and', 'my', 'your', 'our', 'his', 'her', 'their', 'in', 'on', 'for', 'at', 'from', 'by'}
 LINE_MAX, LINE_MIN = 10, 3
 JOINS = {'and', 'but', 'then', 'to', 'when', 'where', 'that', 'who', 'because', 'so', 'or', 'if', 'like', 'as'}
@@ -199,6 +201,8 @@ def lines_of(words, db, language='en'):
         bare = word.strip('.,?!:;"').lower()
         if not word[:1].isupper() or word.split("'")[0] == 'I' or re.search(r'[,.?!:;]$', last):
             return False
+        if last.lower() in LEADS:
+            return False  # "Drove my / Chevy": a word after "my" or "the" finishes its phrase
         if bare in COMMON:
             return True  # "Lola / She was a showgirl"
         if last[:1].isupper():
